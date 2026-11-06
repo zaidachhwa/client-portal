@@ -1,0 +1,22 @@
+# Local MongoDB as a single-node replica set, so multi-document transactions work (§16).
+# Start: docker compose up -d   ·   Connect with ?directConnection=true (see .env.local)
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped # come back after a reboot
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports: ["127.0.0.1:27037:27017"]
+    volumes: [mongo-data:/data/db]
+    # Initiates the replica set on first boot, then just reports health.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"]
+      # Each check starts a full mongosh (Node.js) process, so keep it rare once the container is up;
+      # start_interval checks every 2s during start_period so the replica set still initiates quickly.
+      interval: 30s
+      timeout: 30s # mongosh can start slowly when the machine is short on memory
+      retries: 3
+      start_period: 40s
+      start_interval: 2s
+
+volumes:
+  mongo-data:

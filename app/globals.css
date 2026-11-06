@@ -1,26 +1,119 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #1b2131;
+  --muted: #777a88;
+  --line: rgb(27 33 49 / 0.07);
+  --card: rgb(255 255 255 / 0.55);
+  color-scheme: light;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-card: var(--card);
+  --font-sans: var(--font-figtree);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #efebe8;
+  color: var(--ink);
+}
+
+/* Warm mesh behind the glass cards (peach → pink → lavender). */
+.mesh {
+  background:
+    radial-gradient(55% 55% at 0% 100%, #fcd6bd 0%, transparent 70%),
+    radial-gradient(45% 60% at 100% 95%, #f29bca 0%, transparent 70%),
+    radial-gradient(40% 50% at 100% 35%, #cdc8f3 0%, transparent 70%),
+    radial-gradient(45% 40% at 65% 0%, #f9c4d0 0%, transparent 70%),
+    radial-gradient(40% 40% at 10% 0%, #fde9de 0%, transparent 70%),
+    #fbf8f6;
+}
+
+.glass {
+  background: var(--card);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid rgb(255 255 255 / 0.7);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.8),
+    0 12px 32px -16px rgb(90 40 70 / 0.18);
+}
+
+/* Invoices print as plain paper: no gradient, blur or shadow. */
+@media print {
+  body, .mesh { background: #fff; }
+  .glass { background: #fff; backdrop-filter: none; -webkit-backdrop-filter: none; border: 0; box-shadow: none; }
+}
+
+/* Older chat messages dissolve into the header instead of being cut off. */
+.fade-top {
+  mask-image: linear-gradient(to bottom, transparent 0, black 48px);
+}
+
+.press {
+  transition: transform 160ms var(--ease-out);
+}
+.press:active {
+  transform: scale(0.97);
+}
+
+/* Persona menu: native popover, enter/exit with @starting-style, origin at the avatar. */
+.menu {
+  transform-origin: bottom left;
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out),
+    overlay 150ms allow-discrete,
+    display 150ms allow-discrete;
+  opacity: 0;
+  transform: scale(0.96);
+}
+.menu:popover-open {
+  opacity: 1;
+  transform: scale(1);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(27 33 49 / 0.15) transparent;
+}
+
+/* Modal dialog: centered scale + fade (modals stay center-origin), backdrop fades with it. */
+.dialog {
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 200ms var(--ease-out),
+    transform 200ms var(--ease-out),
+    overlay 200ms allow-discrete,
+    display 200ms allow-discrete;
+}
+.dialog[open] {
+  opacity: 1;
+  transform: scale(1);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.dialog::backdrop {
+  background: rgb(27 33 49 / 0);
+  transition:
+    background 200ms var(--ease-out),
+    overlay 200ms allow-discrete,
+    display 200ms allow-discrete;
+}
+.dialog[open]::backdrop {
+  background: rgb(27 33 49 / 0.25);
+  @starting-style {
+    background: rgb(27 33 49 / 0);
+  }
 }

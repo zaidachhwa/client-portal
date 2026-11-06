@@ -1,0 +1,26 @@
+# Production on a VPS: the app behind Caddy, which gets and renews HTTPS certificates automatically.
+#   docker compose -f docker-compose.prod.yml up -d --build
+# The database is MongoDB Atlas (MONGODB_URI in .env.production); uploads go to Cloudinary when configured,
+# otherwise to the "uploads" volume.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    volumes: [uploads:/app/storage]
+    expose: ["3000"]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  uploads:
+  caddy-data:
+  caddy-config:
