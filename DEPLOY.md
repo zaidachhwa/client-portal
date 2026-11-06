@@ -1,7 +1,7 @@
 # Deploying to client.keyset.in
 
 The app is a single Next.js server (pages and API together), so only `client.keyset.in` is needed.
-It runs in Docker on the VPS behind Caddy, which handles HTTPS automatically. The database is MongoDB Atlas.
+It runs in Docker behind the VPS's existing Nginx reverse proxy; Certbot manages HTTPS. The database is MongoDB Atlas.
 
 ## 1. MongoDB Atlas
 1. Use a cluster (M0 free tier works) and a database user with read/write access.
@@ -18,7 +18,7 @@ Check it before step 4: `getent hosts client.keyset.in` should print the VPS IP.
 # Docker, if missing
 curl -fsSL https://get.docker.com | sh
 
-# Ports 80 and 443 must be open (Caddy needs 80 to get the certificate)
+# Ports 80 and 443 must be open for Nginx and Certbot
 sudo ufw allow 80,443/tcp && sudo ufw allow 443/udp   # if ufw is enabled
 
 git clone git@github.com:zaidachhwa/client-portal.git && cd client-portal
@@ -30,10 +30,20 @@ Uploads need `CLOUDINARY_URL` (recommended); without it files go to the `uploads
 
 ## 4. Start it
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml logs -f      # Ctrl+C to stop following
+sudo ss -ltnp | grep ':14002'   # Choose another unused port if this prints a listener
+sudo docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+sudo docker compose -f docker-compose.prod.yml logs -f app      # Ctrl+C to stop following
 ```
-The first build takes a few minutes. Caddy then fetches the HTTPS certificate; https://client.keyset.in should load the sign-in page.
+The first build takes a few minutes. The app listens only on `127.0.0.1:14002`, leaving public ports 80 and 443 to Nginx.
+
+Install the included Nginx site and request its certificate:
+```bash
+sudo cp deploy/nginx-client.keyset.in.conf /etc/nginx/sites-available/client.keyset.in
+sudo ln -s /etc/nginx/sites-available/client.keyset.in /etc/nginx/sites-enabled/client.keyset.in
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d client.keyset.in
+```
+Then https://client.keyset.in should load the sign-in page. If the site symlink already exists, skip the `ln` command.
 
 ## 5. Create your organization and admin (once)
 From any machine with this repo and Node 24+ (your laptop is fine):
@@ -48,10 +58,10 @@ Then sign in at https://client.keyset.in and open **Settings** to add your GSTIN
 ## Updating
 ```bash
 cd client-portal && git pull
-docker compose -f docker-compose.prod.yml up -d --build
+sudo docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 ```
 
 ## Useful
-- Logs: `docker compose -f docker-compose.prod.yml logs -f app`
-- Restart: `docker compose -f docker-compose.prod.yml restart app`
+- Logs: `sudo docker compose -f docker-compose.prod.yml logs -f app`
+- Restart: `sudo docker compose -f docker-compose.prod.yml restart app`
 - Retention job (dry run, then apply): `MONGODB_URI=… npm run retention` / `… -- --apply`
