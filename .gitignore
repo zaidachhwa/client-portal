@@ -49,3 +49,6 @@ next-env.d.ts
 .claude/
 .agents/
 skills-lock.json
+
+# launch video working files (the published video lives in public/landing/)
+/brag-output/

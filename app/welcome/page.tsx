@@ -108,6 +108,7 @@ export default function Welcome() {
           <nav aria-label="Main" className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
             <Link href="/welcome" className="flex items-center gap-2 text-[17px] font-medium"><Logo /> Zenova</Link>
             <div className="hidden gap-6 text-[14px] text-muted md:flex">
+              <a href="#watch" className="transition-colors hover:text-ink">Watch</a>
               <a href="#flow" className="transition-colors hover:text-ink">How it works</a>
               <a href="#product" className="transition-colors hover:text-ink">Product</a>
               <a href="#billing" className="transition-colors hover:text-ink">Billing</a>
@@ -142,6 +143,25 @@ export default function Welcome() {
               </HeroShot>
             </div>
           </section>
+
+          <Section id="watch" eyebrow="Watch" title="Zenova in 20 seconds" sub="A client ticks off their setup, the phase closes, and the invoice follows.">
+            <Reveal>
+              <div className="glass overflow-hidden rounded-[20px] p-1.5 sm:rounded-[28px] sm:p-2">
+                {/* preload="none": the 3.6 MB file only downloads when someone presses play. */}
+                <video
+                  controls
+                  playsInline
+                  preload="none"
+                  poster="/landing/zenova.jpg"
+                  aria-label="Zenova product video: a client completes their onboarding checklist, the team completes the phase, and a GST invoice is paid."
+                  className="aspect-video w-full rounded-[14px] bg-white/50 sm:rounded-[22px]"
+                >
+                  <source src="/landing/zenova.mp4" type="video/mp4" />
+                </video>
+              </div>
+              <p className="mt-3 px-1 text-[12px] text-muted">Music: “Happy Beats / Business Moves Vol. 1” by Sascha Ende, ende.app (CC BY 4.0)</p>
+            </Reveal>
+          </Section>
 
           <Section id="flow" eyebrow="How it works" title="From signed to delivered, in four steps" sub="The same path for every client, so nothing depends on someone remembering what comes next.">
             <ol className="relative grid gap-8 md:grid-cols-4 md:gap-6">

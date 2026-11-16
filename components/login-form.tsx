@@ -1,5 +1,7 @@
 "use client";
+import { ArrowLeft } from "lucide-react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
+import Link from "next/link";
 import { useActionState, useRef } from "react";
 import { login } from "@/app/actions";
 import { Button, TextField, ease, keepValues, rise } from "./ui";
@@ -19,6 +21,9 @@ export function LoginForm({ demo }: { demo: { email: string; label: string }[] }
   return (
     <MotionConfig reducedMotion="user">
       <motion.div initial="hidden" animate="show" variants={rise} className="w-full max-w-[380px]">
+        <Link href="/welcome" className="press mb-4 inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-[13px] ring-1 ring-white transition-colors duration-150 hover:bg-white">
+          <ArrowLeft size={14} /> About Zenova
+        </Link>
         <div className="glass rounded-[28px] p-7">
           <svg viewBox="0 0 24 24" className="mb-6 size-8 text-ink" role="img" aria-label="Zenova">
             <path fill="currentColor" d="M12 1c.6 5.6 2.4 8.4 11 11-8.6 2.6-10.4 5.4-11 11-.6-5.6-2.4-8.4-11-11 8.6-2.6 10.4-5.4 11-11Z" />
