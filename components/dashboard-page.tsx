@@ -17,7 +17,7 @@ export function DashboardPage({ searchParams, view }: { searchParams: Params; vi
 
 async function Content({ searchParams, view }: { searchParams: Params; view: View }) {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/welcome"); // visitors land on the product page
 
   const { project: wanted, task } = await searchParams;
   const [projects, queue, invites, create, orgs, notifications] = await Promise.all([

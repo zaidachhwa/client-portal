@@ -117,7 +117,7 @@ function ChecklistItem({ task, canToggle }: { task: TaskItem; canToggle: boolean
         <span className="min-w-0">
           <span className="block truncate text-[13px] font-medium">{task.title}</span>
           <span className={`block text-[11px] ${done ? "text-white/60" : "text-muted"}`}>
-            {done ? "Task completed" : task.mine ? "Waiting on you" : "Waiting on client"}
+            {done ? "Task completed" : task.mine ? "Waiting on you" : `Waiting on ${task.assignee || "client"}`}
           </span>
         </span>
       </button>

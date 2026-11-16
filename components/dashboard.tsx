@@ -1,6 +1,6 @@
 "use client";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
-import { ArrowLeftRight, Download, History, Mail, Users, ReceiptText, Settings, CalendarDays, Check, FileText, Folder, LayoutGrid, LogOut, MessageSquare, X } from "lucide-react";
+import { ArrowLeftRight, Download, History, Mail, Users, ReceiptText, Settings, Workflow as WorkflowIcon, CalendarDays, Check, FileText, Folder, LayoutGrid, LogOut, MessageSquare, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
@@ -89,7 +89,7 @@ export function Dashboard({ session, projects, project, queue, invites, create, 
             {project && view === "billing" && (billing ? <Billing key={project.id} projectId={project.id} data={billing} /> : <Card><Empty>Billing isn&apos;t available to you on this project.</Empty></Card>)}
           </Section>
         ) : (
-        /* The page scrolls as a whole; cards keep their natural height so nothing is squeezed. */
+        /* Cards keep their natural height so nothing is squeezed. */
         <motion.main
           key={session.membershipId}
           initial="hidden"
@@ -97,7 +97,8 @@ export function Dashboard({ session, projects, project, queue, invites, create, 
           variants={stagger}
           className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] content-start items-start gap-4 p-3 sm:p-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:gap-5"
         >
-          <div className="flex flex-col gap-5">
+          {/* On desktop the left column scrolls on its own, so the page is only as tall as the right one. */}
+          <div className="scroll-thin flex flex-col gap-5 lg:sticky lg:top-4 lg:-mx-2 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:px-2 lg:pb-2">
             <motion.header variants={rise} className="px-1 pt-3 lg:pt-8">
               <p className="text-[13px] text-muted">
                 Welcome back, {session.firstName} – {session.isStaff ? "here's what needs you today" : "let's build together"}
@@ -118,9 +119,8 @@ export function Dashboard({ session, projects, project, queue, invites, create, 
               <>
                 <Projects projects={projects.filter((p) => (p.name + p.clientName).toLowerCase().includes(q))} current={project?.id} action={create && <CreateButton options={create} />} />
                 {project && <Workflow key={project.id} project={project} canAdvance={session.canAdvance} />}
+                {project && <Checklist tasks={project.onboarding} canToggle={canToggle} />}
                 {project && team && <ProjectTeamCard key={`team-${project.id}`} projectId={project.id} team={team} />}
-                {client && project && <ClientCard key={client.id} client={client} projectId={project.id} />}
-                {session.canApprove && <ReviewQueue items={queue} />}
                 {invites && <Invites options={invites} projects={projects} />}
               </>
             ) : (
@@ -141,6 +141,9 @@ export function Dashboard({ session, projects, project, queue, invites, create, 
                 <Chat project={project} me={session.name} className="h-[540px]" />
                 <Files project={project} canUpload={session.canUpload} className="max-h-[540px]" />
                 {billing && <Billing key={project.id} projectId={project.id} data={billing} className="@3xl:col-span-2" />}
+                {/* Staff extras sit under billing so both columns end at roughly the same height. */}
+                {session.isStaff && client && <ClientCard key={client.id} client={client} projectId={project.id} />}
+                {session.isStaff && session.canApprove && <ReviewQueue items={queue} />}
               </div>
             ) : (
               <Card>
@@ -226,6 +229,11 @@ function Sidebar({ session, orgs, inbox, view, projectId, hasBilling }: Pick<Pro
         {session.permissions.includes("organization.update") && session.isStaff && (
           <Link href="/settings" className="flex w-full items-center gap-2.5 rounded-xl border-t border-line px-2.5 py-2 text-left text-[13px] transition-colors duration-150 hover:bg-black/4">
             <Settings size={15} className="text-muted" /> Settings
+          </Link>
+        )}
+        {session.permissions.includes("organization.update") && session.isStaff && (
+          <Link href="/workflows" className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 hover:bg-black/4">
+            <WorkflowIcon size={15} className="text-muted" /> Workflows
           </Link>
         )}
         {session.isStaff && session.permissions.includes("roles.manage") && (

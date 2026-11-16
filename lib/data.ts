@@ -6,7 +6,7 @@ import { raiseDue } from "./schedules";
 import { can, permissionKeys, sha256, type Session } from "./session";
 import {
   AuditLog, Client, ClientContact, CommunicationThread, Document, DocumentRequirement, DocumentType, DocumentVersion, Invitation, Membership, Message, Organization,
-  Permission, PhaseInstance, Project, ProjectMember, ProjectWorkflow, Role, RolePermission, Task, TaskComment, User, WorkflowTemplate,
+  Permission, PhaseInstance, Project, ProjectMember, ProjectWorkflow, Role, RolePermission, Task, TaskComment, User, WorkflowTemplate, WorkflowVersion,
   CreditNote, DebitNote, Invoice, InvoiceDraft, InvoiceSequence, Notification, PaymentSchedule, Payment, PaymentAllocation, PaymentMethod, Refund,
 } from "./models";
 
@@ -627,3 +627,32 @@ export async function projectTeam(s: S, projectId: string) {
 }
 
 export type ProjectTeam = NonNullable<Awaited<ReturnType<typeof projectTeam>>>;
+
+// ---- Workflow templates (§8.1–8.2)
+
+// Every template with its current published definition and how many projects run it.
+export async function workflowTemplates(s: S) {
+  if (!s.isStaff || !can(s, "organization.update")) return null;
+  const templates = await WorkflowTemplate.find({ organizationId: s.orgId }).sort({ status: 1, name: 1 }).lean();
+  const [versions, usage] = await Promise.all([
+    WorkflowVersion.find({ organizationId: s.orgId, _id: { $in: templates.map((t) => t.currentPublishedVersionId).filter(Boolean) } }).lean(),
+    ProjectWorkflow.aggregate<{ _id: Types.ObjectId; total: number; active: number }>([
+      { $match: { organizationId: new mongoose.Types.ObjectId(s.orgId) } },
+      { $group: { _id: "$workflowTemplateId", total: { $sum: 1 }, active: { $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] } } } },
+    ]),
+  ]);
+  return templates.map((t) => {
+    const v = versions.find((x) => same(x._id, t.currentPublishedVersionId));
+    const u = usage.find((x) => same(x._id, t._id));
+    return {
+      id: String(t._id), name: t.name, description: t.description ?? "", category: t.category ?? "",
+      archived: t.status === "archived", version: v?.version ?? 0, projects: u?.total ?? 0, activeProjects: u?.active ?? 0,
+      phases: (v?.definition?.phases ?? []).map((p) => ({
+        key: p.key, name: p.name,
+        mandatoryTasks: !!p.completion?.mandatoryTasks, mandatoryDocuments: !!p.completion?.mandatoryDocuments,
+        tasks: (p.tasks ?? []).map((x) => ({ title: x.title, mandatory: !!x.mandatory, assignee: x.assignee === "client" ? "client" : "manager", dueInDays: x.dueInDays ?? null })),
+      })),
+    };
+  });
+}
+export type WorkflowTemplateView = NonNullable<Awaited<ReturnType<typeof workflowTemplates>>>[number];

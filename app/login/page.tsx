@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { LoginForm } from "@/components/login-form";
+import { db } from "@/lib/db";
 import { User } from "@/lib/models";
 import { getSession } from "@/lib/session";
 
@@ -25,6 +26,8 @@ async function Gate() {
     { email: "maya@zenova.studio", label: "Maya Lin · Account manager" },
     { email: "sam@zenova.studio", label: "Sam Ortiz · SEO specialist" },
   ];
+  // getSession only connects when there is a cookie, so connect here for the lookup below.
+  if (process.env.NODE_ENV === "development") await db();
   const existing = process.env.NODE_ENV === "development" ? await User.find({ email: { $in: accounts.map((a) => a.email) } }).distinct("email") : [];
   return <LoginForm demo={accounts.filter((a) => existing.includes(a.email))} />;
 }
