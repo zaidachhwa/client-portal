@@ -14,7 +14,8 @@ import {
 import { GSTIN, PAN, gstinMatchesState, isState } from "@/lib/india";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { appUrl, audit, nextNumber, requestMeta, requireSession, type S } from "@/lib/guard";
-import { can, endSession, sha256, startSession } from "@/lib/session";
+import { OPEN_ORG, can, endSession, isPlatformAdmin, sha256, startSession } from "@/lib/session";
+import { checkCode, currentChallenge, isTrustedDevice, resendCode, startChallenge } from "@/lib/otp";
 import { sendMail } from "@/lib/mail";
 import { notify, projectPeople } from "@/lib/notify";
 import { raiseDue } from "@/lib/schedules";
@@ -36,19 +37,50 @@ export async function login(_: { error?: string } | undefined, form: FormData) {
   }
   await LoginAttempt.deleteMany({ key: `email:${email}` });
 
+  // Workspaces this person may open: active membership in an organization that isn't suspended.
+  const memberships = await Membership.find({ userId: user._id, status: "active" }).sort({ joinedAt: 1 }).lean();
+  const open = new Set((await Organization.find({ _id: { $in: memberships.map((m) => m.organizationId) }, status: OPEN_ORG }).distinct("_id")).map(String));
+  const usable = memberships.filter((m) => open.has(String(m.organizationId)));
   // Reopen the organization used last; otherwise the oldest membership.
-  const last = await SessionModel.findOne({ userId: user._id }).sort({ createdAt: -1 }).lean();
-  const membership =
-    (last && (await Membership.findOne({ _id: last.membershipId, userId: user._id, status: "active" }).lean())) ||
-    (await Membership.findOne({ userId: user._id, status: "active" }).sort({ joinedAt: 1 }).lean());
-  if (!membership) {
+  const last = await SessionModel.findOne({ userId: user._id, membershipId: { $ne: null } }).sort({ createdAt: -1 }).lean();
+  const membership = usable.find((m) => String(m._id) === String(last?.membershipId)) ?? usable[0];
+  const admin = isPlatformAdmin(user.email);
+  if (!membership && !admin) {
+    if (memberships.length) return { error: "Your organization's access is paused. Contact Zenova support." };
     const suspended = await Membership.exists({ userId: user._id, status: "suspended" });
     return { error: suspended ? "Your access has been suspended. Ask your account manager to restore it." : "Your account isn't linked to an organization yet." };
   }
 
-  await startSession(user._id, membership);
-  await User.updateOne({ _id: user._id }, { lastLoginAt: new Date() });
-  redirect("/");
+  // A browser that passed OTP in the last 30 days skips it; platform admins never do.
+  if (!admin && (await isTrustedDevice(user._id))) {
+    await startSession(user._id, membership!);
+    await User.updateOne({ _id: user._id }, { lastLoginAt: new Date() });
+    redirect("/");
+  }
+  if (!(await startChallenge(user, membership?._id, admin))) return { error: "We couldn't email your sign-in code. Try again in a minute." };
+  redirect("/login/verify");
+}
+
+// Second step of sign-in: the emailed code (§6, OTP).
+export async function verifyOtp(_: { error?: string } | undefined, form: FormData) {
+  await db();
+  const result = await checkCode(String(form.get("code") ?? "").replace(/\D/g, "").slice(0, 6), form.get("trust") === "on");
+  if ("error" in result) return { error: result.error };
+  const membership = result.membershipId
+    ? await Membership.findOne({ _id: result.membershipId, userId: result.userId, status: "active" }).lean()
+    : null;
+  if (!membership && !result.platformAdmin) return { error: "Your access changed while signing in. Sign in again." };
+  await startSession(result.userId, membership);
+  await User.updateOne({ _id: result.userId }, { lastLoginAt: new Date() });
+  redirect(membership ? "/" : "/admin");
+}
+
+export async function resendOtp() {
+  await db();
+  const current = await currentChallenge();
+  const user = current && (await User.findById(current.challenge.userId).lean());
+  if (!user) return { error: "That code expired. Sign in again." };
+  return resendCode(user);
 }
 
 // Throttle password guesses: 5 failures per email or 30 per IP in 15 minutes (the TTL index clears them).

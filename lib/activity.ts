@@ -61,6 +61,9 @@ export function describe(action: string, before: Snap, after: Snap): string {
     case "organization.retention_updated": return "changed the data retention policy";
     case "user.exported": return "downloaded their personal data";
     case "organization.updated": return "updated the organization's details";
+    case "organization.created": return `created this organization on the platform (owner invite to ${str(a.owner)})`;
+    case "organization.suspended": return "suspended this organization (platform admin)";
+    case "organization.reactivated": return "reactivated this organization (platform admin)";
     case "role.created": return `created the role ${str(a.name)}`;
     case "role.updated": return `edited the role ${str(a.name)}`;
     case "role.activated": return `switched the role ${str(a.name)} on`;

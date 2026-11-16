@@ -4,11 +4,30 @@ import { cookies, headers } from "next/headers";
 import { connection } from "next/server";
 import type { Types } from "mongoose";
 import { db } from "./db";
-import { Membership, Permission, Role, RolePermission, Session as SessionModel, User } from "./models";
+import { Membership, Organization, Permission, Role, RolePermission, Session as SessionModel, User } from "./models";
 
 const COOKIE = "sid";
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+export const cookieOptions = (maxAgeSeconds: number) =>
+  ({ httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: maxAgeSeconds }) as const;
+
+// Platform admins come only from the server's environment, so nothing inside the app can grant it.
+export const isPlatformAdmin = (email?: string | null) =>
+  !!email && (process.env.PLATFORM_ADMINS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean).includes(email.toLowerCase());
+// Organizations whose members may sign in.
+export const OPEN_ORG = { $in: ["active", "trial"] as ("active" | "trial")[] };
+
+// The signed-in user behind the cookie, with or without a workspace. Shared by getSession and the admin console.
+export async function currentLogin() {
+  await connection();
+  const token = (await cookies()).get(COOKIE)?.value;
+  if (!token) return null;
+  await db();
+  const s = await SessionModel.findOne({ tokenHash: sha256(token), revokedAt: null, expiresAt: { $gt: new Date() } }).lean();
+  const u = s && (await User.findOne({ _id: s.userId, status: "active" }).lean());
+  return s && u ? { session: s, user: u } : null;
+}
 
 export async function permissionKeys(orgId: Types.ObjectId | string, roleIds: (Types.ObjectId | string)[]) {
   // Only active roles grant anything.
@@ -20,20 +39,13 @@ export async function permissionKeys(orgId: Types.ObjectId | string, roleIds: (T
 export type Session = Awaited<ReturnType<typeof getSession>>;
 
 export async function getSession() {
-  // Mongoose reads the clock; connection() defers that to request time (Cache Components).
-  await connection();
-  const token = (await cookies()).get(COOKIE)?.value;
-  if (!token) return null;
-  await db();
-
-  const s = await SessionModel.findOne({ tokenHash: sha256(token), revokedAt: null, expiresAt: { $gt: new Date() } }).lean();
-  if (!s) return null;
-  // Membership is re-checked on every request, so suspending someone takes effect immediately.
-  const [m, u] = await Promise.all([
-    Membership.findOne({ _id: s.membershipId, userId: s.userId, status: "active" }).lean(),
-    User.findOne({ _id: s.userId, status: "active" }).lean(),
-  ]);
-  if (!m || !u) return null;
+  // Mongoose reads the clock; connection() (inside currentLogin) defers that to request time (Cache Components).
+  const login = await currentLogin();
+  if (!login?.session.membershipId) return null; // a platform-only admin session opens /admin, nothing else
+  const { session: s, user: u } = login;
+  // Membership and organization are re-checked on every request, so suspending either takes effect immediately.
+  const m = await Membership.findOne({ _id: s.membershipId, userId: s.userId, status: "active" }).lean();
+  if (!m || !(await Organization.exists({ _id: m.organizationId, status: OPEN_ORG }))) return null;
 
   const permissions = await permissionKeys(m.organizationId, m.roleIds);
 
@@ -47,30 +59,26 @@ export async function getSession() {
     firstName: u.firstName,
     emailNotifications: u.emailNotifications !== false,
     name: `${u.firstName} ${u.lastName ?? ""}`.trim(),
+    platformAdmin: isPlatformAdmin(u.email),
   };
 }
 
 export const can = (s: NonNullable<Session>, permission: string) => s.permissions.includes(permission);
 
-export async function startSession(userId: Types.ObjectId, membership: { _id: Types.ObjectId; organizationId: Types.ObjectId }) {
+// No membership: a platform admin who belongs to no organization.
+export async function startSession(userId: Types.ObjectId, membership: { _id: Types.ObjectId; organizationId: Types.ObjectId } | null) {
   const token = randomBytes(32).toString("base64url");
   const h = await headers();
   await SessionModel.create({
     userId,
-    organizationId: membership.organizationId,
-    membershipId: membership._id,
+    organizationId: membership?.organizationId,
+    membershipId: membership?._id,
     tokenHash: sha256(token),
     expiresAt: new Date(Date.now() + TTL_MS),
     ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim(),
     userAgent: h.get("user-agent")?.slice(0, 300),
   });
-  (await cookies()).set(COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: TTL_MS / 1000,
-  });
+  (await cookies()).set(COOKIE, token, cookieOptions(TTL_MS / 1000));
 }
 
 export async function endSession() {

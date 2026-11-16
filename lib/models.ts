@@ -127,8 +127,9 @@ invitation.index({ organizationId: 1, email: 1, status: 1 });
 const session = new Schema(
   {
     userId: ref("User", true),
-    organizationId: org,
-    membershipId: ref("Membership", true),
+    // Both empty for a platform admin who belongs to no organization; such a session only opens /admin.
+    organizationId: ref("Organization"),
+    membershipId: ref("Membership"),
     tokenHash: { type: String, required: true, unique: true },
     expiresAt: { type: Date, required: true },
     revokedAt: Date,
@@ -144,6 +145,30 @@ session.index({ userId: 1 });
 const loginAttempt = new Schema({ key: { type: String, required: true }, createdAt: { type: Date, default: Date.now } });
 loginAttempt.index({ key: 1, createdAt: -1 });
 loginAttempt.index({ createdAt: 1 }, { expireAfterSeconds: 15 * 60 });
+
+// Email sign-in codes (OTP). Only a hash of the code and of the browser's token is stored; TTL clears them.
+const otpChallenge = new Schema(
+  {
+    userId: ref("User", true),
+    membershipId: ref("Membership"), // which workspace to open once verified; empty for a platform-only admin
+    tokenHash: { type: String, required: true, unique: true }, // the short-lived cookie tying this browser to it
+    codeHash: { type: String, required: true },
+    attempts: { type: Number, default: 0 },
+    sends: { type: Number, default: 1 },
+    lastSentAt: { type: Date, default: Date.now },
+    platformAdmin: Boolean, // admins can't skip OTP with a trusted browser
+    expiresAt: { type: Date, required: true },
+  },
+  created,
+);
+otpChallenge.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+// Browsers that passed OTP and may skip it for 30 days.
+const trustedDevice = new Schema(
+  { userId: ref("User", true), tokenHash: { type: String, required: true, unique: true }, expiresAt: { type: Date, required: true } },
+  created,
+);
+trustedDevice.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // Per-organization counters for human-readable codes (CL-0001). Incremented atomically.
 const counter = new Schema({ organizationId: org, key: { type: String, required: true }, value: { type: Number, default: 0 } });
@@ -744,6 +769,8 @@ export const Permission = model("Permission", permission, "permissions");
 export const RolePermission = model("RolePermission", rolePermission, "role_permissions");
 export const Session = model("Session", session, "sessions");
 export const LoginAttempt = model("LoginAttempt", loginAttempt, "login_attempts");
+export const OtpChallenge = model("OtpChallenge", otpChallenge, "otp_challenges");
+export const TrustedDevice = model("TrustedDevice", trustedDevice, "trusted_devices");
 export const Counter = model("Counter", counter, "counters");
 export const Invitation = model("Invitation", invitation, "invitations");
 export const WorkflowTemplate = model("WorkflowTemplate", workflowTemplate, "workflow_templates");

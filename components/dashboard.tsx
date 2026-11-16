@@ -1,6 +1,6 @@
 "use client";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
-import { ArrowLeftRight, Download, History, Mail, Users, ReceiptText, Settings, Workflow as WorkflowIcon, CalendarDays, Check, FileText, Folder, LayoutGrid, LogOut, MessageSquare, X } from "lucide-react";
+import { ArrowLeftRight, Download, ShieldCheck, History, Mail, Users, ReceiptText, Settings, Workflow as WorkflowIcon, CalendarDays, Check, FileText, Folder, LayoutGrid, LogOut, MessageSquare, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
@@ -244,6 +244,11 @@ function Sidebar({ session, orgs, inbox, view, projectId, hasBilling }: Pick<Pro
         {session.isStaff && session.permissions.includes("audit.view") && (
           <Link href="/audit" className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 hover:bg-black/4">
             <History size={15} className="text-muted" /> Activity log
+          </Link>
+        )}
+        {session.platformAdmin && (
+          <Link href="/admin" className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 hover:bg-black/4">
+            <ShieldCheck size={15} className="text-muted" /> Platform admin
           </Link>
         )}
         <EmailToggle on={session.emailNotifications} />

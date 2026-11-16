@@ -7,19 +7,9 @@ import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { emitKeypressEvents } from "node:readline";
 import mongoose from "mongoose";
-import {
-  Membership,
-  Organization,
-  Permission,
-  PaymentMethod,
-  Role,
-  RolePermission,
-  User,
-  WorkflowTemplate,
-  WorkflowVersion,
-} from "../lib/models.ts";
+import { Membership, Organization, User } from "../lib/models.ts";
 import { hashPassword } from "../lib/password.ts";
-import { DEFAULT_ROLES, permissionDocs } from "../lib/permissions.ts";
+import { provisionOrganization, slugify } from "../lib/provision.ts";
 
 const uri = process.env.MONGODB_URI;
 if (!uri)
@@ -138,45 +128,8 @@ rl.close();
 // Indexes first: unique constraints, tenant indexes and TTLs (sessions, notifications) must exist from day one.
 await Promise.all(Object.values(mongoose.models).map((m) => m.syncIndexes()));
 
-const slug =
-  orgName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40) || "org";
-const [org] = await Organization.insertMany([
-  {
-    name: orgName,
-    slug,
-    settings: {
-      timezone: "Asia/Kolkata",
-      locale: "en-IN",
-      defaultCurrency: "INR",
-    },
-  },
-]);
+const { org, roles } = await provisionOrganization(orgName, slugify(orgName));
 const organizationId = org._id;
-
-await Permission.bulkWrite(
-  permissionDocs().map((p) => ({
-    updateOne: { filter: { key: p.key }, update: { $set: p }, upsert: true },
-  })),
-);
-const permissions = await Permission.find().lean();
-const roles: Record<string, mongoose.Types.ObjectId> = {};
-for (const [name, keys] of Object.entries(DEFAULT_ROLES)) {
-  const [role] = await Role.insertMany([
-    { organizationId, name, isSystemRole: true },
-  ]);
-  roles[name] = role._id;
-  await RolePermission.insertMany(
-    keys.map((k) => ({
-      organizationId,
-      roleId: role._id,
-      permissionId: permissions.find((p) => p.key === k)!._id,
-    })),
-  );
-}
 
 const [user] = await User.insertMany([
   {
@@ -197,81 +150,6 @@ await Membership.insertMany([
     joinedAt: new Date(),
   },
 ]);
-
-await PaymentMethod.insertMany([
-  { organizationId, name: "UPI", type: "upi" },
-  { organizationId, name: "Bank transfer", type: "bank_transfer" },
-  { organizationId, name: "Cheque", type: "cheque" },
-  { organizationId, name: "Cash", type: "cash" },
-]);
-
-// A generic workflow so the first project can be created; tasks marked "client" wait for the client to join.
-const [template] = await WorkflowTemplate.insertMany([
-  {
-    organizationId,
-    name: "Client onboarding",
-    category: "General",
-    status: "published",
-    createdBy: user._id,
-  },
-]);
-const [version] = await WorkflowVersion.insertMany([
-  {
-    organizationId,
-    workflowTemplateId: template._id,
-    version: 1,
-    status: "published",
-    publishedAt: new Date(),
-    publishedBy: user._id,
-    definition: {
-      phases: [
-        {
-          key: "onboarding",
-          name: "Onboarding",
-          completion: { mandatoryTasks: true, mandatoryDocuments: true },
-          tasks: [
-            {
-              title: "Kick-off call",
-              mandatory: true,
-              assignee: "manager",
-              dueInDays: 3,
-            },
-            {
-              title: "Complete onboarding questionnaire",
-              mandatory: true,
-              assignee: "client",
-              dueInDays: 5,
-            },
-            {
-              title: "Share access to accounts",
-              mandatory: true,
-              assignee: "client",
-              dueInDays: 7,
-            },
-          ],
-        },
-        {
-          key: "delivery",
-          name: "Delivery",
-          completion: { mandatoryTasks: true, mandatoryDocuments: false },
-          tasks: [
-            { title: "Plan the work", assignee: "manager", dueInDays: 10 },
-            {
-              title: "Review and sign off",
-              mandatory: true,
-              assignee: "client",
-              dueInDays: 30,
-            },
-          ],
-        },
-      ],
-    },
-  },
-]);
-await WorkflowTemplate.updateOne(
-  { _id: template._id },
-  { currentPublishedVersionId: version._id },
-);
 
 console.log(
   `\nDone. "${orgName}" is ready. Sign in as ${email}, then open Settings to add your GSTIN and address.`,
