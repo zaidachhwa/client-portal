@@ -147,7 +147,7 @@ export default function Welcome() {
           <Section id="watch" eyebrow="Watch" title="Zenova in 20 seconds" sub="A client ticks off their setup, the phase closes, and the invoice follows.">
             <Reveal>
               <div className="glass overflow-hidden rounded-[20px] p-1.5 sm:rounded-[28px] sm:p-2">
-                {/* preload="none": the 3.6 MB file only downloads when someone presses play. */}
+                {/* preload="none": the video only downloads when someone presses play. */}
                 <video
                   controls
                   playsInline
@@ -156,6 +156,8 @@ export default function Welcome() {
                   aria-label="Zenova product video: a client completes their onboarding checklist, the team completes the phase, and a GST invoice is paid."
                   className="aspect-video w-full rounded-[14px] bg-white/50 sm:rounded-[22px]"
                 >
+                  {/* WebM first: Firefox on Linux often can't decode H.264. MP4 covers Safari and iOS. */}
+                  <source src="/landing/zenova.webm" type="video/webm" />
                   <source src="/landing/zenova.mp4" type="video/mp4" />
                 </video>
               </div>
