@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Dashboard, type View } from "@/components/dashboard";
-import { atLeast, billing, clientDetail, projectTeam, createOptions, getProjectView, gettingStarted, inbox, inviteOptions, listProjects, myOrgs, reviewQueue } from "@/lib/data";
+import { nav } from "@/components/nav";
+import { OverviewSkeleton, SectionSkeleton } from "@/components/skeletons";
+import { atLeast, billing, clientDetail, projectTeam, createOptions, getProjectView, gettingStarted, inviteOptions, listProjects, reviewQueue } from "@/lib/data";
 import { can, getSession } from "@/lib/session";
 
 // Shared by the overview (/) and the section pages (/calendar, /files, /chat, /billing).
@@ -9,7 +11,8 @@ import { can, getSession } from "@/lib/session";
 type Params = PageProps<"/">["searchParams"];
 export function DashboardPage({ searchParams, view }: { searchParams: Params; view: View }) {
   return (
-    <Suspense fallback={<div className="mesh min-h-dvh" />}>
+    // Only the page area waits; the sidebar lives in the (workspace) layout and stays put.
+    <Suspense fallback={view === "overview" ? <OverviewSkeleton /> : <SectionSkeleton title={nav.find((n) => n.view === view)!.label} />}>
       <Content searchParams={searchParams} view={view} />
     </Suspense>
   );
@@ -20,8 +23,8 @@ async function Content({ searchParams, view }: { searchParams: Params; view: Vie
   if (!session) redirect("/welcome"); // visitors land on the product page
 
   const { project: wanted, task } = await searchParams;
-  const [projects, queue, invites, create, orgs, notifications, setup] = await Promise.all([
-    listProjects(session), reviewQueue(session), inviteOptions(session), createOptions(session), myOrgs(session), inbox(session),
+  const [projects, queue, invites, create, setup] = await Promise.all([
+    listProjects(session), reviewQueue(session), inviteOptions(session), createOptions(session),
     view === "overview" ? gettingStarted(session) : null,
   ]);
   const current = projects.find((p) => p.id === wanted) ?? projects.find((p) => !p.archived) ?? projects[0];
@@ -41,9 +44,7 @@ async function Content({ searchParams, view }: { searchParams: Params; view: Vie
       invites={invites}
       create={create}
       client={client}
-      orgs={orgs}
       billing={bills}
-      inbox={notifications}
       team={team}
       openTask={typeof task === "string" ? task : undefined}
       view={view}

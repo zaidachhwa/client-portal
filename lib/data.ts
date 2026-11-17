@@ -339,7 +339,7 @@ export type ClientDetail = NonNullable<Awaited<ReturnType<typeof clientDetail>>>
 // ---- Billing (§11)
 
 // Clients see their own project's billing; staff need a finance permission.
-const seesBilling = (s: S) => !s.isStaff || can(s, "invoices.issue") || can(s, "payments.verify");
+export const seesBilling = (s: S) => !s.isStaff || can(s, "invoices.issue") || can(s, "payments.verify");
 
 export async function billing(s: S, projectId: string) {
   const access = await projectAccess(s, projectId);
