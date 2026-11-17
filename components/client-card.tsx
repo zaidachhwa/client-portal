@@ -17,7 +17,7 @@ export function ClientCard({ client, projectId }: { client: ClientDetail; projec
   const facts = [client.code, client.type === "organization" ? "Company" : "Individual", client.city].filter(Boolean).join(" · ");
 
   return (
-    <Card>
+    <Card tour="client">
       <CardHeader
         title={client.name}
         sub={facts}

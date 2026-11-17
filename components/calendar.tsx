@@ -4,14 +4,28 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import type { TaskItem } from "@/lib/data";
 import { TaskTitle } from "./task-dialog";
+import { NewTaskButton, TaskForm, dayValue, type TaskManage } from "./task-form";
 import { TaskCheck } from "./tasks";
-import { Card, CardHeader, Empty, IconButton, Segmented, ease } from "./ui";
+import { Button, Card, CardHeader, Dialog, Empty, IconButton, Segmented, ease } from "./ui";
+
+// Empty day: a labelled button is clearer than the small "+" in the header.
+function AddOnDay({ manage, date }: { manage: TaskManage; date: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button type="button" variant="soft" onClick={() => setOpen(true)} className="px-4 py-1.5 text-[12px]">Add a task on this day</Button>
+      <Dialog open={open} onClose={() => setOpen(false)} title="New task" sub="Shows on the calendar and, if assigned, notifies that person.">
+        {open && <TaskForm key={date} manage={manage} defaultDate={date} onDone={() => setOpen(false)} onCancel={() => setOpen(false)} />}
+      </Dialog>
+    </>
+  );
+}
 
 const modes = ["Day", "Week", "Month"] as const;
 const key = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 const weekStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
 
-export function Calendar({ tasks, canToggle, className = "" }: { tasks: TaskItem[]; canToggle: (t: TaskItem) => boolean; className?: string }) {
+export function Calendar({ tasks, canToggle, manage, className = "" }: { tasks: TaskItem[]; canToggle: (t: TaskItem) => boolean; manage?: TaskManage; className?: string }) {
   const [mode, setMode] = useState<(typeof modes)[number]>("Month");
   const [selected, setSelected] = useState(() => new Date());
   const [view, setView] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -34,16 +48,25 @@ export function Calendar({ tasks, canToggle, className = "" }: { tasks: TaskItem
   const today = key(new Date());
 
   return (
-    <Card id="calendar" className={className}>
+    <Card id="calendar" tour="calendar" className={className}>
       <CardHeader
         title="Calendar"
         sub="Your project calendar"
-        action={<Segmented id="cal-mode" label="Calendar range" options={modes} value={mode} onChange={setMode} className="w-52" />}
+        action={
+          <div className="flex items-center gap-2">
+            <Segmented id="cal-mode" label="Calendar range" options={modes} value={mode} onChange={setMode} className="w-52" />
+            {/* New tasks start on the day you're looking at. */}
+            {manage && <NewTaskButton manage={manage} date={dayValue(selected)} label={`Add a task on ${selected.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`} />}
+          </div>
+        }
       />
       {/* Side by side once the card is wide enough; the task list scrolls at the grid's height. */}
       <div className="grid gap-6 @2xl:grid-cols-[minmax(0,1fr)_280px]">
         <ul className="scroll-thin max-h-72 overflow-y-auto pr-1 @2xl:max-h-[300px]">
           {visible.length === 0 && <Empty>No tasks scheduled for this {mode.toLowerCase()}.</Empty>}
+          {visible.length === 0 && manage && mode === "Day" && (
+            <li className="-mt-3 flex justify-center"><AddOnDay manage={manage} date={dayValue(selected)} /></li>
+          )}
           {visible.map(({ t, d }) => (
             <li key={t.id} className="flex gap-3 border-b border-line py-3 last:border-0">
               <span className="pt-0.5"><TaskCheck task={t} canToggle={canToggle(t)} /></span>

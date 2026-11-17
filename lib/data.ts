@@ -124,6 +124,7 @@ export async function getProjectView(s: S, projectId: string) {
     // Open tasks this one waits on; it can't be completed until they are.
     blockedBy: tasks.filter((d) => (t.dependencies ?? []).some((x) => same(x, d._id)) && d.status !== "completed").map((d) => d.title),
     assignee: t.assignedTo ? name(person(t.assignedTo)) : null,
+    assigneeId: t.assignedTo ? String(t.assignedTo) : "",
     comments: comments.filter((c) => same(c.taskId, t._id)).map((c) => ({
       id: String(c._id), author: name(person(c.authorId)), mine: same(c.authorId, s.userId), message: c.message, internal: c.visibility === "internal", at: iso(c.createdAt)!,
     })),
@@ -140,6 +141,10 @@ export async function getProjectView(s: S, projectId: string) {
     description: project.description ?? "",
     // Every task in the project, for picking dependencies.
     allTasks: tasks.map((t) => ({ id: String(t._id), title: t.title })),
+    // Who a task can be given to: the project's active members, team first.
+    assignees: members
+      .map((m) => ({ id: String(m.userId), name: name(person(m.userId)), client: m.role === "client" }))
+      .sort((a, b) => Number(a.client) - Number(b.client) || a.name.localeCompare(b.name)),
     counterpart: { name: name(counterpart), firstName: counterpart?.firstName ?? "" },
     tasks: tasks.filter((t) => !same(t.phaseInstanceId, onboarding?._id)).map(toTask),
     onboarding: tasks.filter((t) => same(t.phaseInstanceId, onboarding?._id)).map(toTask),
@@ -656,3 +661,33 @@ export async function workflowTemplates(s: S) {
   });
 }
 export type WorkflowTemplateView = NonNullable<Awaited<ReturnType<typeof workflowTemplates>>>[number];
+
+// ---- Get started checklist for account managers. Every item is detected from real records, never ticked by hand.
+
+export async function gettingStarted(s: S) {
+  if (!s.isStaff || !can(s, "organization.update") || s.toursSeen.includes("setup-hidden")) return null;
+  const org = { organizationId: s.orgId };
+  const [profile, staff, staffInvite, customWorkflow, templates, clients, projects, clientMember, clientInvite, milestones] = await Promise.all([
+    Organization.findById(s.orgId).lean(),
+    Membership.countDocuments({ ...org, membershipType: "employee", status: "active" }),
+    Invitation.exists({ ...org, membershipType: "employee" }),
+    WorkflowVersion.exists({ ...org, version: { $gt: 1 } }),
+    WorkflowTemplate.countDocuments(org),
+    Client.exists(org),
+    Project.exists(org),
+    Membership.exists({ ...org, membershipType: "client" }),
+    Invitation.exists({ ...org, membershipType: "client" }),
+    PaymentSchedule.exists(org),
+  ]);
+  // target: the dashboard element "Show me" highlights; href: where to go when it isn't on this screen.
+  return [
+    { key: "profile", title: "Add your GSTIN and address", body: "Printed on every invoice; your state decides CGST + SGST or IGST.", done: !!(profile?.taxInformation?.gstin && profile.address?.state), href: "/settings" },
+    { key: "team", title: "Invite a teammate", body: "Use the Teammate tab, then pick their role.", done: staff > 1 || !!staffInvite, target: "invite", href: "/team" },
+    { key: "workflow", title: "Make the workflow yours", body: "Edit the phases and tasks every new project starts with.", done: !!customWorkflow || templates > 1, href: "/workflows" },
+    { key: "client", title: "Add your first client", body: "Press + and choose Client: company, tax details and a contact.", done: !!clients, target: "create" },
+    { key: "project", title: "Start a project", body: "Press + and choose Project; phases, tasks and documents are created for you.", done: !!projects, target: "create" },
+    { key: "invite", title: "Invite the client to the portal", body: "Use the invite icon next to the contact; their tasks are assigned when they join.", done: !!clientMember || !!clientInvite, target: "client" },
+    { key: "billing", title: "Set up billing milestones", body: "Agree the value and add milestones; a finished phase raises the invoice.", done: !!milestones, target: "billing" },
+  ];
+}
+export type GettingStartedItem = NonNullable<Awaited<ReturnType<typeof gettingStarted>>>[number];

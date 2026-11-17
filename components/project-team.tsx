@@ -23,7 +23,7 @@ export function ProjectTeamCard({ projectId, team }: { projectId: string; team: 
   const router = useRouter();
 
   return (
-    <Card>
+    <Card tour="team">
       <CardHeader title="Project team" sub={team.canManage ? "Who can see and work on this project." : "You can view who's on this project."} />
       <ul>
         {team.members.map((m) => {

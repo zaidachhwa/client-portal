@@ -60,6 +60,7 @@ export async function getSession() {
     emailNotifications: u.emailNotifications !== false,
     name: `${u.firstName} ${u.lastName ?? ""}`.trim(),
     platformAdmin: isPlatformAdmin(u.email),
+    toursSeen: u.toursSeen ?? [],
   };
 }
 

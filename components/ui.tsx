@@ -49,9 +49,10 @@ export const rise: Variants = {
 };
 
 // Cards size to their content. Pass a fixed height (e.g. h-[520px]) for scrolling bodies.
-export function Card({ id, className = "", children }: { id?: string; className?: string; children: ReactNode }) {
+// `tour` names the card for the guided tour (data-tour), so steps never depend on layout or copy.
+export function Card({ id, tour, className = "", children }: { id?: string; tour?: string; className?: string; children: ReactNode }) {
   return (
-    <motion.section id={id} variants={rise} className={`glass @container flex scroll-mt-4 flex-col rounded-[28px] p-5 ${className}`}>
+    <motion.section id={id} data-tour={tour} variants={rise} className={`glass @container flex scroll-mt-4 flex-col rounded-[28px] p-5 ${className}`}>
       {children}
     </motion.section>
   );
@@ -150,6 +151,7 @@ export function StateSelect({ label = "State", ...props }: ComponentProps<"selec
 const button = {
   solid: "bg-ink text-white shadow-[0_8px_20px_-10px_rgb(27_33_49/0.6)] hover:bg-ink/90",
   soft: "bg-white/70 text-ink ring-1 ring-white hover:bg-white",
+  danger: "bg-rose-600 text-white shadow-[0_8px_20px_-10px_rgb(225_29_72/0.6)] hover:bg-rose-600/90",
 };
 
 // False during server render and before hydration. Until then a click can't run our handlers: a submit would

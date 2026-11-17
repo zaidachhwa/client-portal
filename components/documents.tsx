@@ -49,7 +49,7 @@ export function Requirements({ projectId, items, canUpload }: { projectId: strin
   if (items.length === 0) return null;
   const approved = items.filter((r) => r.status === "approved").length;
   return (
-    <Card>
+    <Card tour="documents">
       <CardHeader
         title="Required Documents"
         sub="We'll verify each upload."

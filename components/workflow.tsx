@@ -13,7 +13,7 @@ export function Workflow({ project, canAdvance }: { project: ProjectView; canAdv
   const done = project.workflowStatus === "completed";
 
   return (
-    <Card>
+    <Card tour="workflow">
       <CardHeader title="Workflow" sub={[project.clientName, project.name, project.category].filter(Boolean).join(" · ")} />
       {project.description && <p className="-mt-2 mb-3 text-[12px] leading-relaxed text-muted">{project.description}</p>}
       <ol className="mb-4 space-y-1">

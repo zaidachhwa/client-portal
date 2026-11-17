@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Dashboard, type View } from "@/components/dashboard";
-import { atLeast, billing, clientDetail, projectTeam, createOptions, getProjectView, inbox, inviteOptions, listProjects, myOrgs, reviewQueue } from "@/lib/data";
+import { atLeast, billing, clientDetail, projectTeam, createOptions, getProjectView, gettingStarted, inbox, inviteOptions, listProjects, myOrgs, reviewQueue } from "@/lib/data";
 import { can, getSession } from "@/lib/session";
 
 // Shared by the overview (/) and the section pages (/calendar, /files, /chat, /billing).
@@ -20,8 +20,9 @@ async function Content({ searchParams, view }: { searchParams: Params; view: Vie
   if (!session) redirect("/welcome"); // visitors land on the product page
 
   const { project: wanted, task } = await searchParams;
-  const [projects, queue, invites, create, orgs, notifications] = await Promise.all([
+  const [projects, queue, invites, create, orgs, notifications, setup] = await Promise.all([
     listProjects(session), reviewQueue(session), inviteOptions(session), createOptions(session), myOrgs(session), inbox(session),
+    view === "overview" ? gettingStarted(session) : null,
   ]);
   const current = projects.find((p) => p.id === wanted) ?? projects.find((p) => !p.archived) ?? projects[0];
   const project = current ? await getProjectView(session, current.id) : null;
@@ -46,6 +47,7 @@ async function Content({ searchParams, view }: { searchParams: Params; view: Vie
       team={team}
       openTask={typeof task === "string" ? task : undefined}
       view={view}
+      setup={setup}
     />
   );
 }

@@ -54,6 +54,8 @@ const user = new Schema(
     status: { type: String, enum: ["active", "pending", "suspended"], default: "active", index: true },
     lastLoginAt: Date,
     emailNotifications: { type: Boolean, default: true }, // in-app notifications always arrive; this only stops the emails
+    // Guided tours this person has finished or skipped ("client", "staff", "owner"), and "setup-hidden" for the Get started card.
+    toursSeen: { type: [String], default: undefined },
   },
   opts,
 );

@@ -18,7 +18,7 @@ export function CreateButton({ options }: { options: CreateOptions }) {
 
   return (
     <>
-      <IconButton label="New client or project" variant="solid" onClick={() => setOpen(true)}>
+      <IconButton data-tour="create" label="New client or project" variant="solid" onClick={() => setOpen(true)}>
         <Plus size={15} />
       </IconButton>
       <Dialog open={open} onClose={() => setOpen(false)} title={tab === "Client" ? "New client" : "New project"} sub={tab === "Client" ? "Add the company and who we talk to there." : "Sets up phases, tasks and required documents from the workflow."}>

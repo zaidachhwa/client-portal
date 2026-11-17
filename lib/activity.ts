@@ -33,6 +33,9 @@ export function describe(action: string, before: Snap, after: Snap): string {
     case "project.access_changed": return `changed someone's project access to ${str(a.access)}`;
     case "project.member_removed": return "removed someone from a project";
     case "task.updated": return `changed a task's priority or dependencies to ${str(a.priority)}`;
+    case "task.created": return `added the task ${str(a.title)}`;
+    case "task.edited": return `edited the task ${str(a.title)}`;
+    case "task.deleted": return `deleted the task ${str(b.title)}`;
     case "client.archived": return `archived client ${str(a.displayName)}`;
     case "client.restored": return `restored client ${str(a.displayName)}`;
     case "project.archived": return `archived project ${str(a.name)}`;

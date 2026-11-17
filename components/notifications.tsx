@@ -14,6 +14,7 @@ export function Notifications({ inbox }: { inbox: Inbox }) {
   return (
     <>
       <button
+        data-tour="notifications"
         popoverTarget={ID}
         aria-label={inbox.unread ? `Notifications, ${inbox.unread} unread` : "Notifications"}
         title="Notifications"

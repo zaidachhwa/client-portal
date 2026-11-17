@@ -40,7 +40,7 @@ export function Chat({ project, me, className = "" }: { project: ProjectView; me
   }
 
   return (
-    <Card id="chat" className={className}>
+    <Card id="chat" tour="chat" className={className}>
       <CardHeader title={`Chat with ${counterpart}`} sub="Your project conversation" />
       <div ref={list} className="fade-top scroll-thin -mx-2 min-h-0 flex-1 space-y-3 overflow-y-auto px-2 pb-2 pt-8">
         {messages.length === 0 && <Empty>Say hello to {counterpart}.</Empty>}

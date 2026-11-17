@@ -44,7 +44,7 @@ export function Timeline({ tasks, canToggle, phase }: { tasks: TaskItem[]; canTo
   const progress = tasks.length ? lists.Completed.length / tasks.length : 0;
 
   return (
-    <Card>
+    <Card tour="timeline">
       <CardHeader
         title="Your Task Timeline"
         sub={phase ? `Current phase: ${phase}` : "See your project take shape."}
@@ -82,7 +82,7 @@ export function Checklist({ tasks, canToggle }: { tasks: TaskItem[]; canToggle: 
   if (tasks.length === 0) return null;
   const done = tasks.filter((t) => t.status === "completed").length;
   return (
-    <motion.section variants={rise} className="px-1">
+    <motion.section variants={rise} data-tour="checklist" className="px-1">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-[19px] tracking-[-0.01em]">Complete Account Setup</h2>
         <span className="text-[12px] tabular-nums text-muted">{done}/{tasks.length}</span>

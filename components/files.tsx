@@ -16,7 +16,7 @@ export function Files({ project, canUpload, className = "" }: { project: Project
   const shown = project.files.filter((f) => (kind === "All" || kindOf(f.mime) === kind) && f.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
-    <Card id="files" className={className}>
+    <Card id="files" tour="files" className={className}>
       <CardHeader
         title="Project Files"
         sub="Our shared uploads are securely stored."

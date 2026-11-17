@@ -17,7 +17,7 @@ export function Invites({ options, projects }: { options: InviteOptions; project
     : options.roles.filter((r) => r.name !== "Client").sort((a, b) => a.permissions - b.permissions)[0]?.id;
 
   return (
-    <Card>
+    <Card tour="invite">
       <CardHeader title="Invite People" sub="They'll set a password and join right away." />
       <form onSubmit={keepValues(action)} className="space-y-3">
         <Segmented id="invite-kind" label="Invite type" options={kinds} value={kind} onChange={setKind} />

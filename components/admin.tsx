@@ -83,7 +83,7 @@ function Row({ org: o }: { org: Org }) {
           {confirming ? (
             <span className="flex items-center gap-1.5">
               <Button variant="soft" onClick={() => setConfirming(false)} disabled={pending} className="px-3 py-1.5 text-[12px]">Cancel</Button>
-              <Button onClick={toggle} disabled={pending} className={`px-3 py-1.5 text-[12px] ${suspended ? "" : "bg-rose-600 hover:bg-rose-600/90"}`}>
+              <Button onClick={toggle} disabled={pending} variant={suspended ? "solid" : "danger"} className="px-3 py-1.5 text-[12px]">
                 {pending ? "Saving…" : suspended ? "Reactivate" : "Suspend"}
               </Button>
             </span>

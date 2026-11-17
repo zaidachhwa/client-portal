@@ -26,7 +26,7 @@ export function Billing({ projectId, data, className = "" }: { projectId: string
   const pendingCount = data.payments.filter((p) => p.status === "pending").length;
 
   return (
-    <Card id="billing" className={className}>
+    <Card id="billing" tour="billing" className={className}>
       <CardHeader
         title="Billing"
         sub={data.overdue ? `${formatMoney(data.overdue)} overdue` : data.outstanding ? `${formatMoney(data.outstanding)} outstanding` : "All settled"}

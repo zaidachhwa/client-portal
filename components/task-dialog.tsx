@@ -1,8 +1,9 @@
 "use client";
-import { MessageSquare } from "lucide-react";
-import { createContext, useContext, useRef, useState, useTransition, type KeyboardEvent } from "react";
+import { MessageSquare, Pencil } from "lucide-react";
+import { createContext, useContext, useEffect, useRef, useState, useTransition, type KeyboardEvent } from "react";
 import { addTaskComment, updateTask } from "@/app/actions";
 import type { TaskItem } from "@/lib/data";
+import { DeleteTask, TaskForm, type TaskManage } from "./task-form";
 import { Badge, Button, Dialog, FormError, reach, shortDate } from "./ui";
 
 // Any task row can open the shared task dialog without prop-drilling.
@@ -29,49 +30,76 @@ export function TaskTitle({ task, className = "" }: { task: TaskItem; className?
 
 const time = (iso: string) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
-const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
 const priorityTone = { urgent: "rose", high: "amber", medium: "soft", low: "soft" } as const;
 
-export function TaskDialog({ task, staff, canEdit, allTasks, onClose }: {
-  task: TaskItem | undefined; staff: boolean; canEdit: boolean; allTasks: { id: string; title: string }[]; onClose: () => void;
+export function TaskDialog({ task, staff, canEdit, allTasks, manage, onClose }: {
+  task: TaskItem | undefined; staff: boolean; canEdit: boolean; allTasks: { id: string; title: string }[]; manage?: TaskManage; onClose: () => void;
 }) {
   const done = task?.status === "completed";
   const sub = task && [task.dueDate && `Due ${shortDate(task.dueDate)}`, task.assignee ? `Assigned to ${task.mine ? "you" : task.assignee}` : "Unassigned", done ? "Done" : "Open"].filter(Boolean).join(" · ");
   return (
     <Dialog open={!!task} onClose={onClose} title={task?.title ?? ""} sub={sub}>
-      {task && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={priorityTone[task.priority as keyof typeof priorityTone] ?? "soft"}>{task.priority} priority</Badge>
-            {task.blockedBy.length > 0 && !done && <span className="text-[12px] text-muted">Waiting on {task.blockedBy.join(", ")}</span>}
-          </div>
-          {canEdit && <TaskSettings key={`${task.id}-${task.priority}-${task.dependsOn.join()}`} task={task} allTasks={allTasks} />}
-          <Thread key={task.id} task={task} staff={staff} />
-        </div>
-      )}
+      {/* key: switching tasks always starts out of edit mode */}
+      {task && <TaskBody key={task.id} task={task} staff={staff} canEdit={canEdit} allTasks={allTasks} manage={manage} onClose={onClose} />}
     </Dialog>
   );
 }
 
-// Staff with edit access set priority and what this task waits on (§9.1).
+function TaskBody({ task, staff, canEdit, allTasks, manage, onClose }: {
+  task: TaskItem; staff: boolean; canEdit: boolean; allTasks: { id: string; title: string }[]; manage?: TaskManage; onClose: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  // After saving, stay in the form until the refreshed task arrives, so the header never shows the old values.
+  const [savedFrom, setSavedFrom] = useState<TaskItem | null>(null);
+  if (savedFrom && task !== savedFrom) {
+    setSavedFrom(null);
+    setEditing(false);
+  }
+  useEffect(() => {
+    if (!savedFrom) return;
+    const t = setTimeout(() => { setSavedFrom(null); setEditing(false); }, 3000); // never get stuck if the refresh is slow
+    return () => clearTimeout(t);
+  }, [savedFrom]);
+  const done = task.status === "completed";
+  if (editing && manage) {
+    return (
+      <div className="space-y-4">
+        <TaskForm manage={manage} task={task} busy={!!savedFrom} onDone={() => setSavedFrom(task)} onCancel={() => setEditing(false)} />
+        <div className="border-t border-line pt-3"><DeleteTask task={task} onDeleted={onClose} /></div>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={priorityTone[task.priority as keyof typeof priorityTone] ?? "soft"}>{task.priority} priority</Badge>
+        {task.mandatory && <Badge tone="soft">Required</Badge>}
+        {task.blockedBy.length > 0 && !done && <span className="text-[12px] text-muted">Waiting on {task.blockedBy.join(", ")}</span>}
+        {manage && (
+          <Button type="button" variant="soft" onClick={() => setEditing(true)} className="ml-auto gap-1.5 px-3 py-1.5 text-[12px]">
+            <Pencil size={12} /> Edit
+          </Button>
+        )}
+      </div>
+      {canEdit && <TaskSettings key={`${task.id}-${task.dependsOn.join()}`} task={task} allTasks={allTasks} />}
+      <Thread task={task} staff={staff} />
+    </div>
+  );
+}
+
+// Staff with edit access set what this task waits on (§9.1). Priority lives in the Edit form.
 function TaskSettings({ task, allTasks }: { task: TaskItem; allTasks: { id: string; title: string }[] }) {
-  const [priority, setPriority] = useState(task.priority);
   const [deps, setDeps] = useState(task.dependsOn);
   const [error, setError] = useState<string>();
   const [pending, start] = useTransition();
   const others = allTasks.filter((t) => t.id !== task.id);
-  const dirty = priority !== task.priority || [...deps].sort().join() !== [...task.dependsOn].sort().join();
-  const save = () => start(async () => setError((await reach(updateTask(task.id, priority, deps))).error));
+  if (others.length === 0) return null;
+  const dirty = [...deps].sort().join() !== [...task.dependsOn].sort().join();
+  const save = () => start(async () => setError((await reach(updateTask(task.id, task.priority, deps))).error));
   return (
     <details className="rounded-2xl bg-white/60 px-3 py-2 text-[13px]">
-      <summary className="cursor-pointer text-[12px] text-muted">Priority &amp; dependencies</summary>
+      <summary className="cursor-pointer text-[12px] text-muted">Dependencies{task.dependsOn.length ? ` (${task.dependsOn.length})` : ""}</summary>
       <div className="mt-2 space-y-3">
-        <label className="flex items-center gap-2 text-[12px]">
-          Priority
-          <select value={priority} onChange={(e) => setPriority(e.target.value as typeof priority)} className="rounded-full bg-white/80 px-3 py-1 ring-1 ring-white outline-none">
-            {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </label>
         {others.length > 0 && (
           <fieldset>
             <legend className="mb-1 text-[12px]">Can&apos;t be completed until these are done</legend>

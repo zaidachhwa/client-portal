@@ -137,6 +137,14 @@ export async function setEmailNotifications(on: boolean) {
   refresh();
 }
 
+// Guided tour finished or skipped, or the Get started card hidden. Only known keys are stored.
+const TOUR_KEYS = ["client", "staff", "owner", "setup-hidden"];
+export async function markTourSeen(key: string) {
+  const s = await requireSession();
+  if (!TOUR_KEYS.includes(key)) return;
+  await User.updateOne({ _id: s.userId }, { $addToSet: { toursSeen: key } });
+}
+
 // ---- Messages and tasks
 
 export async function sendMessage(projectId: string, text: string) {
@@ -208,6 +216,102 @@ export async function updateTask(taskId: string, priority: string, dependencies:
   t.dependencies = deps.map((d) => new Types.ObjectId(d));
   await t.save();
   await audit(s, "task.updated", "task", t._id, before, { priority, dependencies: [...deps].sort() });
+  refresh();
+  return {};
+}
+
+// ---- Adding, editing and deleting tasks by hand (§9). Staff with tasks.update and edit access to the project.
+
+export type TaskInput = { title: string; description: string; dueDate: string; assigneeId: string; priority: string; mandatory: boolean };
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+// Shared checks for create and edit. Returns clean fields, or an error to show.
+async function cleanTask(s: S, projectId: Types.ObjectId | string, input: TaskInput) {
+  const title = String(input?.title ?? "").trim().slice(0, 160);
+  if (!title) return { error: "Give the task a title." } as const;
+  const dueDate = String(input.dueDate ?? "");
+  if (dueDate && (!DAY.test(dueDate) || Number.isNaN(Date.parse(dueDate)))) return { error: "Pick a valid due date." } as const;
+  if (!PRIORITIES.includes(input.priority as (typeof PRIORITIES)[number])) return { error: "Pick a priority." } as const;
+  const assigneeId = String(input.assigneeId ?? "");
+  // Only people on this project can be given the task.
+  if (assigneeId && (!isValidObjectId(assigneeId) || !(await ProjectMember.exists({ organizationId: s.orgId, projectId, userId: assigneeId, status: "active" })))) {
+    return { error: "Pick someone who's on this project." } as const;
+  }
+  return {
+    title,
+    description: String(input.description ?? "").trim().slice(0, 1000) || undefined,
+    // Noon UTC, so the date reads the same in India and anywhere a client might be.
+    dueDate: dueDate ? new Date(`${dueDate}T12:00:00Z`) : undefined,
+    assignedTo: assigneeId ? new Types.ObjectId(assigneeId) : undefined,
+    priority: input.priority as (typeof PRIORITIES)[number],
+    isMandatory: input.mandatory === true,
+  } as const;
+}
+
+async function canManageTasks(s: S, projectId: Types.ObjectId | string) {
+  return s.isStaff && can(s, "tasks.update") && (await canAccessProject(s, projectId, "edit"));
+}
+
+// The new assignee hears about it (never yourself).
+async function tellAssignee(s: S, task: { _id: Types.ObjectId; projectId: unknown; title: string; assignedTo?: Types.ObjectId | null; dueDate?: Date | null }) {
+  if (!task.assignedTo || String(task.assignedTo) === s.userId) return;
+  const base = await appUrl();
+  const due = task.dueDate ? ` It's due ${task.dueDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}.` : "";
+  after(() =>
+    notify(s.orgId, [task.assignedTo!], {
+      title: `New task: ${task.title}`, message: `${s.name} assigned you “${task.title}”.${due}`,
+      resourceType: "task", resourceId: task._id, link: `/?project=${task.projectId}&task=${task._id}`,
+    }, base),
+  );
+}
+
+// taskId null creates a task in the project; otherwise edits that task.
+export async function saveTask(projectId: string, taskId: string | null, input: TaskInput) {
+  const s = await requireSession();
+  if (!isValidObjectId(projectId) || (taskId !== null && !isValidObjectId(taskId))) return { error: "Task not found." };
+  if (!(await canManageTasks(s, projectId))) return { error: "You can't change tasks on this project." };
+  const fields = await cleanTask(s, projectId, input);
+  if ("error" in fields) return { error: fields.error };
+
+  // A required task belongs to the current phase, so that phase can't complete until it's done.
+  const wf = await ProjectWorkflow.findOne({ organizationId: s.orgId, projectId, status: "active" }).lean();
+  const phaseId = wf?.currentPhaseInstanceId;
+
+  if (taskId === null) {
+    if (fields.isMandatory && !phaseId) return { error: "This project has no active phase, so a task can't be required for it." };
+    const [t] = await Task.insertMany([{ organizationId: s.orgId, projectId, ...fields, phaseInstanceId: fields.isMandatory ? phaseId : undefined }]);
+    await audit(s, "task.created", "task", t._id, undefined, { title: t.title });
+    await tellAssignee(s, t);
+    refresh();
+    return { id: String(t._id) };
+  }
+
+  const t = await Task.findOne({ _id: taskId, organizationId: s.orgId, projectId });
+  if (!t) return { error: "Task not found." };
+  if (fields.isMandatory && !t.phaseInstanceId && !phaseId) return { error: "This project has no active phase, so a task can't be required for it." };
+  const before = { title: t.title, dueDate: t.dueDate, assignedTo: t.assignedTo, priority: t.priority, isMandatory: t.isMandatory };
+  const reassigned = String(t.assignedTo ?? "") !== String(fields.assignedTo ?? "");
+  t.set({ ...fields, ...(fields.isMandatory && !t.phaseInstanceId ? { phaseInstanceId: phaseId } : {}) });
+  await t.save();
+  await audit(s, "task.edited", "task", t._id, before, { title: t.title, dueDate: t.dueDate, assignedTo: t.assignedTo, priority: t.priority, isMandatory: t.isMandatory });
+  if (reassigned) await tellAssignee(s, t);
+  refresh();
+  return { id: String(t._id) };
+}
+
+// Removes the task, its comments, and it from anything that was waiting on it — together.
+export async function deleteTask(taskId: string) {
+  const s = await requireSession();
+  if (!isValidObjectId(taskId)) return { error: "Task not found." };
+  const t = await Task.findOne({ _id: taskId, organizationId: s.orgId }).lean();
+  if (!t) return { error: "Task not found." };
+  if (!(await canManageTasks(s, t.projectId))) return { error: "You can't change tasks on this project." };
+  await tx(async () => {
+    await Task.deleteOne({ _id: t._id, organizationId: s.orgId });
+    await TaskComment.deleteMany({ organizationId: s.orgId, taskId: t._id });
+    await Task.updateMany({ organizationId: s.orgId, projectId: t.projectId, dependencies: t._id }, { $pull: { dependencies: t._id } });
+    await audit(s, "task.deleted", "task", t._id, { title: t.title, status: t.status }, undefined);
+  });
   refresh();
   return {};
 }

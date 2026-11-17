@@ -1,11 +1,11 @@
 "use client";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
-import { ArrowLeftRight, Download, ShieldCheck, History, Mail, Users, ReceiptText, Settings, Workflow as WorkflowIcon, CalendarDays, Check, FileText, Folder, LayoutGrid, LogOut, MessageSquare, X } from "lucide-react";
+import { ArrowLeftRight, Compass, Download, ShieldCheck, History, Mail, Users, ReceiptText, Settings, Workflow as WorkflowIcon, CalendarDays, Check, FileText, Folder, LayoutGrid, LogOut, MessageSquare, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { archiveProject, logout, reviewDocument, setEmailNotifications, switchOrg } from "@/app/actions";
-import type { Billing as BillingData, ClientDetail, Inbox, ProjectTeam, CreateOptions, InviteOptions, OrgOption, ProjectSummary, ProjectView, ReviewItem, TaskItem } from "@/lib/data";
+import type { Billing as BillingData, ClientDetail, GettingStartedItem, Inbox, ProjectTeam, CreateOptions, InviteOptions, OrgOption, ProjectSummary, ProjectView, ReviewItem, TaskItem } from "@/lib/data";
 import type { Session } from "@/lib/session";
 import { Calendar } from "./calendar";
 import { Chat } from "./chat";
@@ -21,6 +21,9 @@ import { ClientCard } from "./client-card";
 import { CreateButton } from "./create";
 import { Invites } from "./invites";
 import { Workflow } from "./workflow";
+import { GettingStarted } from "./getting-started";
+import { Tour, type TourRole } from "./tour";
+import type { TaskManage } from "./task-form";
 
 type Props = {
   session: NonNullable<Session> & { canUpload: boolean; canAdvance: boolean; canApprove: boolean };
@@ -36,9 +39,12 @@ type Props = {
   openTask?: string; // from ?task=, e.g. a notification link
   team: ProjectTeam | null;
   view: View;
+  setup?: GettingStartedItem[] | null;
 };
 
-export function Dashboard({ session, projects, project, queue, invites, create, client, orgs, billing, inbox, openTask, team, view }: Props) {
+export function Dashboard({ session, projects, project, queue, invites, create, client, orgs, billing, inbox, openTask, team, view, setup }: Props) {
+  // Which guided tour fits: clients, account managers (who can change org settings), everyone else on the team.
+  const tourRole: TourRole = !session.isStaff ? "client" : session.permissions.includes("organization.update") ? "owner" : "staff";
   const [query, setQuery] = useState("");
   const q = query.toLowerCase();
   const match = (t: TaskItem) => (t.title + t.description).toLowerCase().includes(q);
@@ -48,6 +54,11 @@ export function Dashboard({ session, projects, project, queue, invites, create, 
   const canToggle = (t: TaskItem) =>
     edits && (session.isStaff ? session.permissions.includes("tasks.update") : t.mine) && (t.status === "completed" || t.blockedBy.length === 0);
   const phase = project?.phases.find((p) => p.current)?.name;
+  // The calendar shows every dated task, onboarding ones included, sorted by date (the timeline leaves those to the checklist).
+  const dated = project ? [...project.tasks, ...project.onboarding].sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")) : [];
+  // Adding, editing and deleting tasks: staff with tasks.update and edit access (mirrors saveTask on the server).
+  const manage: TaskManage | undefined =
+    project && edits && session.isStaff && session.permissions.includes("tasks.update") ? { projectId: project.id, assignees: project.assignees } : undefined;
 
   const router = useRouter();
   // Live updates: re-fetch server data every 30s while the tab is visible, and as soon as it's focused again.
@@ -83,7 +94,7 @@ export function Dashboard({ session, projects, project, queue, invites, create, 
 
         {view !== "overview" ? (
           <Section view={view} projects={projects} project={project}>
-            {project && view === "calendar" && <Calendar tasks={project.tasks} canToggle={canToggle} />}
+            {project && view === "calendar" && <Calendar tasks={dated} canToggle={canToggle} manage={manage} />}
             {project && view === "files" && <Files project={project} canUpload={session.canUpload} />}
             {project && view === "chat" && <Chat project={project} me={session.name} className="h-[calc(100dvh-190px)] min-h-[420px]" />}
             {project && view === "billing" && (billing ? <Billing key={project.id} projectId={project.id} data={billing} /> : <Card><Empty>Billing isn&apos;t available to you on this project.</Empty></Card>)}
@@ -117,6 +128,7 @@ export function Dashboard({ session, projects, project, queue, invites, create, 
             {project?.archived && <ArchivedBanner projectId={project.id} canRestore={!!team?.canArchive} />}
             {session.isStaff ? (
               <>
+                {setup && <GettingStarted items={setup} />}
                 <Projects projects={projects.filter((p) => (p.name + p.clientName).toLowerCase().includes(q))} current={project?.id} action={create && <CreateButton options={create} />} />
                 {project && <Workflow key={project.id} project={project} canAdvance={session.canAdvance} />}
                 {project && <Checklist tasks={project.onboarding} canToggle={canToggle} />}
@@ -137,7 +149,7 @@ export function Dashboard({ session, projects, project, queue, invites, create, 
           <div className="@container">
             {project ? (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-4 @3xl:grid-cols-2 lg:gap-5">
-                <Calendar tasks={project.tasks.filter(match)} canToggle={canToggle} className="@3xl:col-span-2" />
+                <Calendar tasks={dated.filter(match)} canToggle={canToggle} manage={manage} className="@3xl:col-span-2" />
                 <Chat project={project} me={session.name} className="h-[540px]" />
                 <Files project={project} canUpload={session.canUpload} className="max-h-[540px]" />
                 {billing && <Billing key={project.id} projectId={project.id} data={billing} className="@3xl:col-span-2" />}
@@ -158,9 +170,12 @@ export function Dashboard({ session, projects, project, queue, invites, create, 
         task={openedTask || undefined}
         staff={session.isStaff}
         canEdit={edits && session.isStaff && session.permissions.includes("tasks.update")}
+        manage={manage}
         allTasks={project?.allTasks ?? []}
         onClose={closeTask}
       />
+      {/* Plays once on a person's first visit to the overview; "Take the tour" in the menu replays it. */}
+      <Tour role={tourRole} auto={view === "overview" && !session.toursSeen.includes(tourRole)} />
       </OpenTask>
     </MotionConfig>
   );
@@ -198,7 +213,7 @@ function Sidebar({ session, orgs, inbox, view, projectId, hasBilling }: Pick<Pro
       ))}
 
       <Notifications inbox={inbox} />
-      <button popoverTarget="account-menu" aria-label={`Account: ${session.name}`} className="press mt-1 rounded-full">
+      <button data-tour="account" popoverTarget="account-menu" aria-label={`Account: ${session.name}`} className="press mt-1 rounded-full">
         <Avatar name={session.name} size={42} />
       </button>
       <div id="account-menu" popover="auto" className="menu fixed inset-auto bottom-4 left-[76px] m-0 w-60 rounded-2xl bg-white/90 p-1.5 text-ink shadow-[0_16px_40px_-12px_rgb(27_33_49/0.35)] ring-1 ring-black/5 backdrop-blur-xl">
@@ -251,6 +266,16 @@ function Sidebar({ session, orgs, inbox, view, projectId, hasBilling }: Pick<Pro
             <ShieldCheck size={15} className="text-muted" /> Platform admin
           </Link>
         )}
+        <button
+          type="button"
+          onClick={() => {
+            document.getElementById("account-menu")?.hidePopover();
+            window.dispatchEvent(new Event("zenova:tour"));
+          }}
+          className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 hover:bg-black/4"
+        >
+          <Compass size={15} className="text-muted" /> Take the tour
+        </button>
         <EmailToggle on={session.emailNotifications} />
         <a href="/export/me" download className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 hover:bg-black/4">
           <Download size={15} className="text-muted" /> Download my data
@@ -271,7 +296,7 @@ function Projects({ projects: all, current, action }: { projects: ProjectSummary
   // The open project stays listed even when archived, so you can see where you are.
   const projects = all.filter((p) => showArchived || !p.archived || p.id === current);
   return (
-    <Card>
+    <Card tour="projects">
       <CardHeader title="Active Projects" sub={`${all.length - archivedCount} in progress`} action={action} />
       {projects.length === 0 && <Empty>No projects match.</Empty>}
       <ul className="space-y-1">
@@ -379,7 +404,7 @@ function Section({ view, projects, project, children }: { view: View; projects: 
 
 function ReviewQueue({ items }: { items: ReviewItem[] }) {
   return (
-    <Card>
+    <Card tour="review">
       <CardHeader title="Review Queue" sub="Client uploads waiting on verification." />
       {items.length === 0 && <Empty>All caught up.</Empty>}
       <ul>
